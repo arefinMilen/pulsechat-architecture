@@ -144,12 +144,17 @@ export function UserSearchModal({ isOpen, onClose }: UserSearchModalProps) {
             </button>
           ))
         ) : query.trim() ? (
-          <p className="text-center py-8 text-gray-400 text-sm">
-            No one found matching &quot;{query}&quot;.
-          </p>
+          <div className="text-center py-8 px-2">
+            <p className="text-gray-400 text-sm">No one found matching &quot;{query}&quot;.</p>
+            {/* Names match from the start and numbers must be exact, so a
+                partial query legitimately returns nothing. */}
+            <p className="text-gray-500 text-xs mt-2">
+              Search matches the start of a name, or a complete phone number.
+            </p>
+          </div>
         ) : (
           <p className="text-center py-8 text-gray-500 text-sm">
-            Type a name or phone number to find someone.
+            Search by the start of someone&apos;s name, or their full phone number.
           </p>
         )}
       </div>

@@ -220,8 +220,8 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
             ) : (
               <p className="text-center py-4 text-xs text-gray-500">
                 {searchQuery.trim()
-                  ? `No one found matching "${searchQuery}".`
-                  : 'Search for people to add to the group.'}
+                  ? `No one found matching "${searchQuery}". Search matches the start of a name, or a complete phone number.`
+                  : 'Search by the start of a name, or a full phone number.'}
               </p>
             )}
           </div>

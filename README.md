@@ -249,11 +249,15 @@ claims, uninstalled the packages, and rewrote this document to describe what is
 actually here. That is the correction I would most want a reviewer to know I
 made.
 
-I verified the finished client against the live API with a throwaway integration
-script — 26 assertions covering id mapping, direct-thread titles, message
-ordering, sender/receiver classification, the group-size rejection, and the
-socket frame shape. All passed. It is not committed because there is no test
-runner configured, which is the first thing I would add.
+I verified the finished client against the live API with throwaway integration
+scripts — id mapping, direct-thread titles, message ordering, sender/receiver
+classification, the group-size rejection, the socket frame shape, and a two-user
+exchange with one client listening on the socket while the other posted over
+REST. That pass is also what caught issues 11 and 12 below: the search endpoint's
+regex injection, and the fact that the API happily stores empty messages despite
+my having documented the opposite. Assumptions I had written down but not
+executed were exactly the ones that turned out wrong, which is the argument for
+committing these as real tests — the first thing I would add.
 
 ---
 
@@ -300,6 +304,30 @@ runner configured, which is the first thing I would add.
 
 10. **`clientTempId` is accepted but not echoed back.** **Handled by**
     reattaching it locally for optimistic reconciliation.
+
+11. **`GET /users/search` interpolates the query into a MongoDB regex
+    unescaped**, so a metacharacter returns `500`
+    (`"Regular expression is invalid"`). `+`, `*`, `?`, `(`, `)` and `[` all
+    reproduce it — and `+` begins most international phone numbers, so typing
+    one into a search box crashes the endpoint. It is also a regex-injection and
+    ReDoS surface: `q=.` returns 50 users. **Handled by** escaping metacharacters
+    before sending.
+
+    Matching is also narrower than it appears: `name` is an **anchored** regex
+    and `phone` is **exact equality**, so `nikur` will not find "anikur" and
+    `0175088` will not find `01750885871`. There is no substring search. The UI
+    now says what the search actually supports rather than letting a partial
+    query look like "no such user". One consequence I could not work around:
+    escaping makes the regex safe but no longer equals the stored phone string,
+    so a number saved with a leading `+` cannot be matched by number at all —
+    raw crashes, escaped matches nothing. Those users are still findable by name.
+
+12. **Empty messages are accepted by the API.** `POST /messages` with
+    `{"text": ""}` returns `200` and stores a blank message; only omitting the
+    field is rejected. I had assumed the opposite and documented it that way
+    until a live check caught it. The requirement that empty messages not be
+    sendable is therefore enforced entirely client-side — the send control is
+    disabled and the store rejects a blank body before any request goes out.
 
 ---
 

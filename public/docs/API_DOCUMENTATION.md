@@ -123,8 +123,7 @@ Returns the user object **directly**, not wrapped in `{ user }`.
 
 ### `GET /users/search?q={query}` — find people
 
-Case-insensitive substring match against both name and phone. Returns a **bare
-array**.
+Returns a **bare array**.
 
 ```json
 [
@@ -132,9 +131,39 @@ array**.
 ]
 ```
 
-**Notes.**
-- The result set is unpaginated and includes the caller — filter yourself out client-side.
-- An empty `q` is not rejected; this client short-circuits instead of sending it.
+**Notes — the matching rules are not what they look like.**
+
+1. **`name` is matched by an anchored regular expression; `phone` is matched by
+   exact equality.** `anikur` finds the user named "anikur"; `nikur` and `kur`
+   find nothing. `01750885871` finds that user by number, but `0175088` does not.
+   There is no substring search.
+
+2. **The query is interpolated straight into a MongoDB regular expression, so a
+   regex metacharacter crashes the endpoint with `500`:**
+
+   ```
+   GET /users/search?q=%2B      →  500
+   {"error":{"message":"Regular expression is invalid: quantifier does not follow
+    a repeatable item","code":51091}}
+   ```
+
+   `+`, `*`, `?`, `(`, `)` and `[` all reproduce it. This matters because `+`
+   begins most international phone numbers — typing one into a search box takes
+   the endpoint down. It is also a regex-injection surface: `q=.` returns 50
+   users, and a pathological pattern would be a ReDoS vector.
+
+   **This client escapes metacharacters before sending.** Note the trade-off
+   that forces: escaping makes the name regex safe, but because `phone` is
+   compared by exact equality, the escaped form (`\+1555…`) no longer equals the
+   stored value (`+1555…`). A number stored with a leading `+` therefore cannot
+   be found by number at all — sending it raw crashes, sending it escaped
+   matches nothing. Those users remain findable by name. Not fixable client-side;
+   the endpoint needs to escape its own input and match phone by substring.
+
+3. The result set is unpaginated and **includes the caller** — filter yourself
+   out client-side.
+
+4. An empty `q` is not rejected; this client short-circuits instead of sending it.
 
 ---
 
@@ -287,7 +316,12 @@ client can patch local state directly instead of refetching the list.
 **Notes.**
 - `clientTempId` is accepted but **not echoed back**; this client reattaches it locally to reconcile the optimistic bubble.
 - Returns `200`, where `201` would be conventional for a creation.
-- An empty `text` is rejected with `VALIDATION_ERROR`.
+- **An empty or whitespace-only `text` is accepted and stored.** `{"text": ""}`
+  returns `200` and persists a blank message; only *omitting* the field
+  altogether is rejected (`VALIDATION_ERROR`, `path: "text"`). The requirement
+  that empty messages not be sendable is therefore enforced entirely on the
+  client — the composer disables the send control and the store rejects a blank
+  body before any request is made.
 
 ---
 
@@ -341,5 +375,7 @@ The only event the gateway emits.
 | Newest-first messages | Sorted ascending before render |
 | `lastMessage: {}` | Treated as null when empty |
 | Undocumented 3-member group rule | Enforced and explained in the UI |
+| Regex injection on `/users/search` | Metacharacters escaped before sending |
+| Empty message bodies accepted | Blocked client-side in the composer and store |
 | `hasMore` with no cursor | Left unimplemented, documented as a limitation |
 | Cold starts | 45s timeout with an explanatory message in the loading state |

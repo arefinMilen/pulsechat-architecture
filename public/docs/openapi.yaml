@@ -94,9 +94,23 @@ paths:
       tags: [Users]
       summary: Search the directory by name or phone
       description: |
-        Case-insensitive substring match against both fields. Returns a **bare
-        array**, unpaginated, and includes the caller — filter yourself out
-        client-side.
+        Returns a **bare array**, unpaginated, and includes the caller — filter
+        yourself out client-side.
+
+        Matching is not a substring search: `name` is matched by an **anchored
+        regular expression** and `phone` by **exact equality**. `anikur` finds
+        that user; `nikur` does not. `01750885871` finds that user; `0175088`
+        does not.
+
+        **The query is interpolated into a MongoDB regex unescaped**, so `+`,
+        `*`, `?`, `(`, `)` or `[` return `500`
+        (`"Regular expression is invalid"`, code 51091). Since `+` begins most
+        international numbers, an unescaped search box will crash this endpoint.
+        It is also a regex-injection / ReDoS surface.
+
+        Escaping the query client-side fixes the crash but, because `phone` is
+        compared by equality, means a number stored with a leading `+` cannot be
+        matched by number at all. Such users remain findable by name.
       parameters:
         - name: q
           in: query
@@ -327,8 +341,11 @@ paths:
       tags: [Messages]
       summary: Send a message
       description: |
-        Returns `200` where `201` would be conventional. Empty `text` is
-        rejected.
+        Returns `200` where `201` would be conventional.
+
+        **An empty or whitespace-only `text` is accepted and stored** — only
+        omitting the field entirely is rejected. Preventing blank messages is
+        therefore a client-side responsibility.
 
         `clientTempId` is accepted but **not echoed back** in the response —
         reattach it client-side to reconcile an optimistic message.
@@ -344,7 +361,11 @@ paths:
               required: [conversationId, text]
               properties:
                 conversationId: { type: string }
-                text: { type: string, minLength: 1, example: See you then }
+                text:
+                  type: string
+                  description: |
+                    Not validated for emptiness server-side; `""` is stored.
+                  example: See you then
                 clientTempId:
                   type: string
                   description: Client correlation id. Accepted, not returned.
