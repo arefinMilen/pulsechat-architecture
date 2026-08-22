@@ -29,36 +29,10 @@ export interface Message {
   text: string;
   createdAt: string;
   status?: MessageStatus;
+  /** Correlates an optimistic bubble with its server-confirmed counterpart. */
   clientTempId?: string;
-}
-
-export interface LoginResponse {
-  token: string;
-  user: User;
-}
-
-export interface SearchUsersResponse {
-  users: User[];
-}
-
-export interface ChatState {
-  conversations: Conversation[];
-  activeConversationId: string | null;
-  messages: Record<string, Message[]>; // conversationId -> Message[]
-  searchQuery: string;
-  messageSearchQuery: string;
-  isLoadingConversations: boolean;
-  isLoadingMessages: boolean;
-  isSendingMessage: boolean;
-  isOnline: boolean;
-}
-
-export interface SocketMessageNewEvent {
-  message: Message;
-}
-
-export interface SocketConversationUpdatedEvent {
-  conversation: Conversation;
+  /** Populated when `status === 'failed'`, for the inline retry affordance. */
+  error?: string;
 }
 
 export type LatencyOption = 20 | 300 | 1500;

@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { Conversation, Message, User } from '../types';
 import { apiService } from '../lib/api-client';
-import { emitSocketMessage } from '../lib/socket';
+import { apiError } from '../lib/normalize';
+import { SocketStatus } from '../lib/socket';
 
 interface ChatStore {
   conversations: Conversation[];
@@ -11,200 +12,262 @@ interface ChatStore {
   messageSearchQuery: string;
   isLoadingConversations: boolean;
   isLoadingMessages: boolean;
-  isSending: boolean;
+  conversationsError: string | null;
+  messagesError: string | null;
   isOnline: boolean;
-  
-  // Actions
+  socketStatus: SocketStatus;
+
   setSearchQuery: (query: string) => void;
   setMessageSearchQuery: (query: string) => void;
   setActiveConversation: (id: string) => Promise<void>;
+  clearActiveConversation: () => void;
   fetchConversations: () => Promise<void>;
   fetchMessages: (conversationId: string) => Promise<void>;
   sendMessage: (conversationId: string, text: string, currentUser: User) => Promise<void>;
+  retryMessage: (conversationId: string, clientTempId: string, currentUser: User) => Promise<void>;
   receiveSocketMessage: (msg: Message) => void;
-  updateConversationFromSocket: (conv: Conversation) => void;
+  upsertConversation: (conv: Conversation) => void;
   startDirectConversation: (userId: string) => Promise<string>;
   createGroupConversation: (name: string, participantIds: string[]) => Promise<string>;
   setIsOnline: (online: boolean) => void;
+  setSocketStatus: (status: SocketStatus) => void;
+  reset: () => void;
 }
 
-export const useChatStore = create<ChatStore>((set, get) => ({
-  conversations: [],
-  activeConversationId: null,
-  messages: {},
+const initialState = {
+  conversations: [] as Conversation[],
+  activeConversationId: null as string | null,
+  messages: {} as Record<string, Message[]>,
   searchQuery: '',
   messageSearchQuery: '',
   isLoadingConversations: false,
   isLoadingMessages: false,
-  isSending: false,
+  conversationsError: null as string | null,
+  messagesError: null as string | null,
   isOnline: true,
+  socketStatus: 'connecting' as SocketStatus,
+};
+
+/** Newest conversation first, matching the API's own ordering. */
+const byRecency = (a: Conversation, b: Conversation) =>
+  new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+
+export const useChatStore = create<ChatStore>((set, get) => ({
+  ...initialState,
 
   setSearchQuery: (query) => set({ searchQuery: query }),
   setMessageSearchQuery: (query) => set({ messageSearchQuery: query }),
   setIsOnline: (online) => set({ isOnline: online }),
+  setSocketStatus: (socketStatus) => set({ socketStatus }),
+  reset: () => set({ ...initialState }),
 
   fetchConversations: async () => {
-    set({ isLoadingConversations: true });
+    set({ isLoadingConversations: true, conversationsError: null });
     try {
-      const convs = await apiService.getConversations();
-      const safeConvs = Array.isArray(convs) ? convs : [];
-      set({ conversations: safeConvs, isLoadingConversations: false });
-      if (safeConvs.length > 0 && !get().activeConversationId) {
-        get().setActiveConversation(safeConvs[0].id);
+      const conversations = (await apiService.getConversations())
+        .filter((c) => !!c.id)
+        .sort(byRecency);
+
+      set({ conversations, isLoadingConversations: false });
+
+      // Auto-open the most recent thread on desktop only; on small screens the
+      // list is the landing view and the user picks a thread themselves.
+      const isWideViewport =
+        typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches;
+
+      if (isWideViewport && conversations.length > 0 && !get().activeConversationId) {
+        void get().setActiveConversation(conversations[0].id);
       }
-    } catch {
-      set({ isLoadingConversations: false });
+    } catch (err) {
+      set({ isLoadingConversations: false, conversationsError: apiError(err) });
     }
   },
 
   setActiveConversation: async (id: string) => {
-    set({ activeConversationId: id, messageSearchQuery: '' });
-    // Reset unread count for this conversation
+    if (!id) return;
+
     set((state) => ({
+      activeConversationId: id,
+      messageSearchQuery: '',
+      messagesError: null,
       conversations: state.conversations.map((c) =>
         c.id === id ? { ...c, unreadCount: 0 } : c
       ),
     }));
+
     await get().fetchMessages(id);
   },
 
+  clearActiveConversation: () => set({ activeConversationId: null, messageSearchQuery: '' }),
+
   fetchMessages: async (conversationId: string) => {
+    if (!conversationId) return;
+
+    // Only show the full-panel spinner on a first load; a refetch of an already
+    // populated thread should not blank out the transcript.
     if (!get().messages[conversationId]) {
       set({ isLoadingMessages: true });
     }
+    set({ messagesError: null });
+
     try {
       const msgList = await apiService.getMessages(conversationId);
       set((state) => ({
         messages: { ...state.messages, [conversationId]: msgList },
         isLoadingMessages: false,
       }));
-    } catch {
-      set({ isLoadingMessages: false });
+    } catch (err) {
+      set({ isLoadingMessages: false, messagesError: apiError(err) });
     }
   },
 
   sendMessage: async (conversationId: string, text: string, currentUser: User) => {
-    if (!text.trim()) return;
+    const body = text.trim();
+    if (!body || !conversationId) return;
 
-    const clientTempId = `temp_${Date.now()}`;
+    const clientTempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
     const optimisticMsg: Message = {
       id: clientTempId,
       conversationId,
       senderId: currentUser.id,
       sender: currentUser,
-      text: text.trim(),
+      text: body,
       createdAt: new Date().toISOString(),
       status: 'sending',
       clientTempId,
     };
 
-    // Append optimistic message immediately
-    set((state) => {
-      const currentMsgs = state.messages[conversationId] || [];
-      return {
-        messages: {
-          ...state.messages,
-          [conversationId]: [...currentMsgs, optimisticMsg],
-        },
-      };
-    });
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [conversationId]: [...(state.messages[conversationId] || []), optimisticMsg],
+      },
+    }));
 
-    // Try transmitting over WebSocket first
-    emitSocketMessage(conversationId, text.trim());
+    await get().retryMessage(conversationId, clientTempId, currentUser);
+  },
+
+  /**
+   * Transmits (or re-transmits) a pending message. Sending is REST-only — the
+   * gateway broadcasts to the other participants once `POST /messages` lands.
+   */
+  retryMessage: async (conversationId: string, clientTempId: string, currentUser: User) => {
+    const pending = (get().messages[conversationId] || []).find(
+      (m) => m.clientTempId === clientTempId
+    );
+    if (!pending) return;
+
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [conversationId]: (state.messages[conversationId] || []).map((m) =>
+          m.clientTempId === clientTempId ? { ...m, status: 'sending' as const } : m
+        ),
+      },
+    }));
 
     try {
-      const actualMsg = await apiService.sendMessage(conversationId, text.trim(), clientTempId);
+      const actualMsg = await apiService.sendMessage(conversationId, pending.text, clientTempId);
 
-      // Reconcile optimistic message with finalized server response
-      set((state) => {
-        const msgs = (state.messages[conversationId] || []).map((m) =>
-          m.clientTempId === clientTempId || m.id === clientTempId ? { ...actualMsg, status: 'sent' as const } : m
-        );
-        return {
-          messages: { ...state.messages, [conversationId]: msgs },
-          conversations: state.conversations.map((c) =>
-            c.id === conversationId ? { ...c, lastMessage: actualMsg, updatedAt: actualMsg.createdAt } : c
+      set((state) => ({
+        messages: {
+          ...state.messages,
+          [conversationId]: (state.messages[conversationId] || []).map((m) =>
+            m.clientTempId === clientTempId
+              ? { ...actualMsg, sender: actualMsg.sender ?? currentUser, status: 'sent' as const }
+              : m
           ),
-        };
-      });
-    } catch {
-      // Mark as failed if send throws
-      set((state) => {
-        const msgs = (state.messages[conversationId] || []).map((m) =>
-          m.clientTempId === clientTempId ? { ...m, status: 'failed' as const } : m
-        );
-        return {
-          messages: { ...state.messages, [conversationId]: msgs },
-        };
-      });
+        },
+        conversations: state.conversations
+          .map((c) =>
+            c.id === conversationId
+              ? { ...c, lastMessage: actualMsg, updatedAt: actualMsg.createdAt }
+              : c
+          )
+          .sort(byRecency),
+      }));
+    } catch (err) {
+      set((state) => ({
+        messages: {
+          ...state.messages,
+          [conversationId]: (state.messages[conversationId] || []).map((m) =>
+            m.clientTempId === clientTempId
+              ? { ...m, status: 'failed' as const, error: apiError(err) }
+              : m
+          ),
+        },
+      }));
     }
   },
 
   receiveSocketMessage: (msg: Message) => {
-    const { activeConversationId, conversations } = get();
-    const isCurrentActive = activeConversationId === msg.conversationId;
+    if (!msg.conversationId) return;
 
     set((state) => {
       const currentMsgs = state.messages[msg.conversationId] || [];
-      // Deduplicate if already present via optimistic update
-      const exists = currentMsgs.some(
-        (m) => m.id === msg.id || (m.clientTempId && m.clientTempId === msg.clientTempId)
-      );
 
-      const updatedMsgs = exists
-        ? currentMsgs.map((m) => (m.clientTempId === msg.clientTempId ? msg : m))
-        : [...currentMsgs, msg];
+      // The server does not echo a sender's own messages, but guard against
+      // duplicates anyway in case a thread is refetched mid-flight.
+      if (currentMsgs.some((m) => m.id === msg.id)) return state;
 
-      const updatedConvs = conversations.map((c) => {
-        if (c.id === msg.conversationId) {
-          return {
-            ...c,
-            lastMessage: msg,
-            updatedAt: msg.createdAt,
-            unreadCount: !isCurrentActive ? (c.unreadCount || 0) + 1 : 0,
-          };
-        }
-        return c;
-      });
+      const isActive = state.activeConversationId === msg.conversationId;
 
       return {
-        messages: { ...state.messages, [msg.conversationId]: updatedMsgs },
-        conversations: updatedConvs,
+        ...state,
+        messages: {
+          ...state.messages,
+          [msg.conversationId]: [...currentMsgs, msg],
+        },
+        conversations: state.conversations
+          .map((c) =>
+            c.id === msg.conversationId
+              ? {
+                  ...c,
+                  lastMessage: msg,
+                  updatedAt: msg.createdAt,
+                  unreadCount: isActive ? 0 : (c.unreadCount || 0) + 1,
+                }
+              : c
+          )
+          .sort(byRecency),
       };
     });
+
+    // A message for an unknown thread means the conversation list is stale
+    // (e.g. somebody just added us to a group).
+    if (!get().conversations.some((c) => c.id === msg.conversationId)) {
+      void get().fetchConversations();
+    }
   },
 
-  updateConversationFromSocket: (conv: Conversation) => {
+  upsertConversation: (conv: Conversation) => {
+    if (!conv?.id) return;
     set((state) => {
       const exists = state.conversations.some((c) => c.id === conv.id);
       return {
-        conversations: exists
-          ? state.conversations.map((c) => (c.id === conv.id ? conv : c))
-          : [conv, ...state.conversations],
+        conversations: (exists
+          ? state.conversations.map((c) => (c.id === conv.id ? { ...c, ...conv } : c))
+          : [conv, ...state.conversations]
+        ).sort(byRecency),
       };
     });
   },
 
   startDirectConversation: async (userId: string) => {
     const conv = await apiService.startDirectConversation(userId);
-    set((state) => {
-      const exists = state.conversations.some((c) => c.id === conv.id);
-      return {
-        conversations: exists ? state.conversations : [conv, ...state.conversations],
-        activeConversationId: conv.id,
-      };
-    });
-    await get().fetchMessages(conv.id);
+    get().upsertConversation(conv);
+    await get().setActiveConversation(conv.id);
+    // The create response returns participants as bare ids, so refresh the list
+    // to pick up the hydrated counterpart for the thread title.
+    void get().fetchConversations();
     return conv.id;
   },
 
   createGroupConversation: async (name: string, participantIds: string[]) => {
     const conv = await apiService.createGroup(name, participantIds);
-    set((state) => ({
-      conversations: [conv, ...state.conversations],
-      activeConversationId: conv.id,
-    }));
-    await get().fetchMessages(conv.id);
+    get().upsertConversation(conv);
+    await get().setActiveConversation(conv.id);
     return conv.id;
   },
 }));

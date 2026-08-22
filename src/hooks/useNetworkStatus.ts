@@ -1,7 +1,11 @@
 import { useEffect } from 'react';
 import { useChatStore } from '../store/useChatStore';
 
-export function useOfflineQueue() {
+/**
+ * Mirrors browser connectivity into the chat store so the composer can tell the
+ * user that a send will not go through right now.
+ */
+export function useNetworkStatus() {
   const setIsOnline = useChatStore((state) => state.setIsOnline);
 
   useEffect(() => {

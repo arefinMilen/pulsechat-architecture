@@ -1,85 +1,98 @@
 import { create } from 'zustand';
 import { User } from '../types';
-import { apiService } from '../lib/api-client';
-import { initSocket, disconnectSocket } from '../lib/socket';
+import { apiService, TOKEN_STORAGE_KEY, USER_STORAGE_KEY } from '../lib/api-client';
+import { apiError } from '../lib/normalize';
+import { disconnectSocket, initSocket } from '../lib/socket';
 
 interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
+  /** True until the persisted session has been read back from storage. */
+  isInitializing: boolean;
   isLoading: boolean;
   error: string | null;
   login: (phone: string, name: string) => Promise<boolean>;
   logout: () => void;
-  initializeAuth: () => Promise<void>;
+  initializeAuth: () => void;
+  clearError: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   token: null,
   isAuthenticated: false,
+  isInitializing: true,
   isLoading: false,
   error: null,
+
+  clearError: () => set({ error: null }),
 
   login: async (phone: string, name: string) => {
     set({ isLoading: true, error: null });
     try {
-      const data = await apiService.login(phone, name);
-      localStorage.setItem('pulsechat_token', data.token);
-      localStorage.setItem('pulsechat_user', JSON.stringify(data.user));
+      const { token, user } = await apiService.login(phone, name);
 
-      initSocket(data.token);
+      if (!user.id) {
+        throw new Error('The server returned an account without an identifier.');
+      }
+
+      localStorage.setItem(TOKEN_STORAGE_KEY, token);
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+
+      initSocket(token);
 
       set({
-        user: data.user,
-        token: data.token,
+        user,
+        token,
         isAuthenticated: true,
+        isInitializing: false,
         isLoading: false,
       });
       return true;
-    } catch (err: any) {
-      set({
-        error: err?.response?.data?.message || 'Login failed. Please try again.',
-        isLoading: false,
-      });
+    } catch (err) {
+      set({ error: apiError(err), isLoading: false });
       return false;
     }
   },
 
   logout: () => {
-    localStorage.removeItem('pulsechat_token');
-    localStorage.removeItem('pulsechat_user');
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem(USER_STORAGE_KEY);
     disconnectSocket();
     set({
       user: null,
       token: null,
       isAuthenticated: false,
+      isInitializing: false,
       isLoading: false,
+      error: null,
     });
   },
 
-  initializeAuth: async () => {
+  initializeAuth: () => {
     if (typeof window === 'undefined') return;
-    const token = localStorage.getItem('pulsechat_token');
-    const storedUser = localStorage.getItem('pulsechat_user');
 
-    if (token && storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser);
-        initSocket(token);
-        set({
-          user: parsedUser,
-          token,
-          isAuthenticated: true,
-          isLoading: false,
-        });
-      } catch {
-        localStorage.removeItem('pulsechat_token');
-        localStorage.removeItem('pulsechat_user');
-        set({ isLoading: false });
-      }
-    } else {
-      set({ isLoading: false });
+    const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+    const storedUser = localStorage.getItem(USER_STORAGE_KEY);
+
+    if (!token || !storedUser) {
+      set({ isInitializing: false, isAuthenticated: false });
+      return;
+    }
+
+    try {
+      const user: User = JSON.parse(storedUser);
+
+      // A session persisted before the id normalization landed is unusable.
+      if (!user?.id) throw new Error('Stale session payload');
+
+      initSocket(token);
+      set({ user, token, isAuthenticated: true, isInitializing: false });
+    } catch {
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      localStorage.removeItem(USER_STORAGE_KEY);
+      set({ isInitializing: false, isAuthenticated: false });
     }
   },
 }));

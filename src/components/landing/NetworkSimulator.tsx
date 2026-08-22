@@ -31,13 +31,16 @@ export function NetworkSimulator() {
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 text-xs font-semibold border border-indigo-500/20 mb-3">
             <Activity className="w-3.5 h-3.5" />
-            <span>Interactive Evaluator Bonus Showcase</span>
+            <span>Interactive demo — simulated, not a live connection</span>
           </div>
           <h2 className="text-3xl md:text-4xl font-bold text-white">
-            Real-Time Network Latency & Drop Simulator
+            See what a bad network does to a chat UI
           </h2>
-          <p className="text-xs md:text-sm text-gray-400 mt-2 max-w-2xl mx-auto">
-            Test optimistic UI updates, packet transmission telemetry, and offline queue recovery in real-time.
+          <p className="text-sm text-gray-400 mt-3 max-w-2xl mx-auto leading-relaxed">
+            A self-contained model of the send path, so you can watch it without a second device.
+            Add latency or drop the connection and see how an optimistic bubble behaves. The
+            numbers below are produced by this simulation — they are not measurements of the
+            hosted API.
           </p>
         </div>
 
@@ -48,7 +51,7 @@ export function NetworkSimulator() {
             <div className="flex items-center gap-3">
               <span className="text-xs font-medium text-gray-400 flex items-center gap-1.5">
                 <Clock className="w-4 h-4 text-indigo-400" />
-                Target Latency:
+                Latency:
               </span>
               <div className="flex items-center gap-1.5">
                 {([20, 300, 1500] as LatencyOption[]).map((val) => (
@@ -80,12 +83,12 @@ export function NetworkSimulator() {
                 {isOnline ? (
                   <>
                     <Wifi className="w-4 h-4" />
-                    <span>Mode: Online</span>
+                    <span>Online</span>
                   </>
                 ) : (
                   <>
                     <WifiOff className="w-4 h-4" />
-                    <span>Mode: Offline (Queued)</span>
+                    <span>Offline — queueing</span>
                   </>
                 )}
               </button>
@@ -107,10 +110,10 @@ export function NetworkSimulator() {
               <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-3">
                 <span className="text-xs font-bold text-gray-200 flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
-                  Simulated User A (Sender View)
+                  Sender
                 </span>
                 <span className="text-[10px] text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full">
-                  Optimistic Render
+                  Renders immediately
                 </span>
               </div>
 
@@ -122,7 +125,7 @@ export function NetworkSimulator() {
                       <div className="flex items-center justify-end gap-1 text-[9px] text-indigo-200 mt-1">
                         <span>Status: {m.status}</span>
                         {m.status === 'sending' ? (
-                          <Clock className="w-3 h-3 animate-spin" />
+                          <Clock className="w-3 h-3" />
                         ) : (
                           <Check className="w-3 h-3" />
                         )}
@@ -137,7 +140,7 @@ export function NetworkSimulator() {
                   type="text"
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
-                  placeholder="Type message to test latency..."
+                  placeholder="Type a message to test…"
                   className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500"
                 />
                 <button
@@ -155,10 +158,10 @@ export function NetworkSimulator() {
               <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-3">
                 <span className="text-xs font-bold text-gray-200 flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                  Simulated User B (Receiver View)
+                  Recipient
                 </span>
                 <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                  WebSocket Stream
+                  Arrives on delivery
                 </span>
               </div>
 
@@ -179,7 +182,7 @@ export function NetworkSimulator() {
               </div>
 
               <div className="mt-3 p-2 rounded-xl bg-black/40 border border-white/5 text-[11px] text-gray-400 text-center">
-                Receiving packets over active WebSocket connection
+A message appears here only once the simulated round-trip completes
               </div>
             </div>
           </div>
@@ -187,21 +190,21 @@ export function NetworkSimulator() {
           {/* Telemetry Dashboard */}
           <div className="p-4 rounded-2xl bg-black/50 border border-white/10 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div>
-              <span className="text-[10px] uppercase font-bold text-gray-400 block">Packet RTT</span>
+              <span className="text-[10px] uppercase font-bold text-gray-400 block">Round trip</span>
               <span className="text-lg font-extrabold text-indigo-400">{metrics.rttMs} ms</span>
             </div>
             <div>
-              <span className="text-[10px] uppercase font-bold text-gray-400 block">Optimistic Render</span>
+              <span className="text-[10px] uppercase font-bold text-gray-400 block">Local render</span>
               <span className="text-lg font-extrabold text-cyan-400">{metrics.optimisticRenderMs} ms</span>
             </div>
             <div>
-              <span className="text-[10px] uppercase font-bold text-gray-400 block">Packets Sent / Rcv</span>
+              <span className="text-[10px] uppercase font-bold text-gray-400 block">Sent / received</span>
               <span className="text-lg font-extrabold text-purple-400">
                 {metrics.packetsSent} / {metrics.packetsReceived}
               </span>
             </div>
             <div>
-              <span className="text-[10px] uppercase font-bold text-gray-400 block">Sync Status</span>
+              <span className="text-[10px] uppercase font-bold text-gray-400 block">Status</span>
               <span
                 className={`text-sm font-extrabold ${
                   metrics.syncStatus === 'Synchronized'
