@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { MessageSquare, Github, ExternalLink } from 'lucide-react';
+import { ExternalLink, MessageSquare } from 'lucide-react';
 
 export function Footer() {
   return (
@@ -14,13 +14,13 @@ export function Footer() {
           </div>
           <div>
             <span className="text-sm font-bold tracking-tight text-white">PulseChat</span>
-            <p className="text-[11px] text-gray-400">Senior Frontend Take-Home Assignment Deliverable</p>
+            <p className="text-[11px] text-gray-400">Frontend take-home assignment</p>
           </div>
         </div>
 
         <div className="flex items-center gap-6 text-xs text-gray-400">
           <Link href="/login" className="hover:text-indigo-400 transition-colors">
-            Chat Application
+            Chat app
           </Link>
           <a
             href="/docs/API_DOCUMENTATION.md"
@@ -28,7 +28,7 @@ export function Footer() {
             rel="noreferrer"
             className="hover:text-indigo-400 transition-colors flex items-center gap-1"
           >
-            <span>API Docs</span>
+            <span>API reference</span>
             <ExternalLink className="w-3 h-3" />
           </a>
           <a
@@ -37,13 +37,13 @@ export function Footer() {
             rel="noreferrer"
             className="hover:text-indigo-400 transition-colors flex items-center gap-1"
           >
-            <span>OpenAPI Spec</span>
+            <span>OpenAPI spec</span>
             <ExternalLink className="w-3 h-3" />
           </a>
         </div>
 
         <div className="text-xs text-gray-500">
-          Built with Next.js 15, React 19 & Tailwind CSS v4
+          Next.js 15 · React 19 · Tailwind CSS v4
         </div>
       </div>
     </footer>

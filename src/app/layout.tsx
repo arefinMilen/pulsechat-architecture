@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
+import { siteUrl } from '@/lib/site';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -10,50 +11,40 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: {
-    default: 'PulseChat | Real-Time Messaging Architecture',
+    default: 'PulseChat — real-time messaging',
     template: '%s | PulseChat',
   },
   description:
-    'Production-ready real-time chat application featuring optimistic updates, threshold scroll lock, offline mutation queue, and interactive network simulator.',
+    'A chat application with live message delivery, optimistic sending, considerate auto-scroll, and honest loading, empty, and error states.',
   keywords: [
-    'Real-Time Chat',
+    'real-time chat',
     'Next.js 15',
-    'WebSockets',
-    'Socket.io',
     'React 19',
+    'Socket.IO',
     'TypeScript',
     'Tailwind CSS',
     'Zustand',
-    'TanStack Query',
   ],
-  authors: [{ name: 'Senior Frontend Engineer Candidate' }],
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://pulsechat-demo.vercel.app',
-    title: 'PulseChat | Real-Time Messaging Architecture',
+    url: siteUrl,
+    title: 'PulseChat — real-time messaging',
     description:
-      'High-performance real-time messaging architecture featuring sub-50ms latency, threshold auto-scroll, and resilient offline sync.',
+      'Live message delivery, optimistic sending, and scroll that stays where you put it.',
     siteName: 'PulseChat',
-    images: [
-      {
-        url: 'https://pulsechat-demo.vercel.app/og.png',
-        width: 1200,
-        height: 630,
-        alt: 'PulseChat Architecture Preview',
-      },
-    ],
+    images: [{ url: '/og', width: 1200, height: 630, alt: 'PulseChat' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'PulseChat Architecture Showcase',
-    description: 'Enterprise real-time chat built with Next.js 15 and React 19.',
+    title: 'PulseChat — real-time messaging',
+    description:
+      'Live message delivery, optimistic sending, and scroll that stays where you put it.',
+    images: ['/og'],
   },
-  robots: {
-    index: true,
-    follow: true,
-  },
+  robots: { index: true, follow: true },
 };
 
 const jsonLd = {
@@ -68,7 +59,7 @@ const jsonLd = {
     priceCurrency: 'USD',
   },
   description:
-    'Enterprise real-time chat application built with Next.js 15, WebSockets, optimistic UI updates, and offline sync.',
+    'A real-time chat application built with Next.js 15, React 19, and Socket.IO.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
