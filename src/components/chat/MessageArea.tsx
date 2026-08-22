@@ -19,7 +19,12 @@ import { useChatScroll } from '../../hooks/useChatScroll';
 import { MessageInput } from './MessageInput';
 import { ScrollToBottomPill } from './ScrollToBottomPill';
 import { GroupSettingsModal } from './GroupSettingsModal';
-import { conversationTitle, initialsOf } from '../../lib/display';
+import {
+  conversationTitle,
+  indexParticipants,
+  initialsOf,
+  senderName,
+} from '../../lib/display';
 
 interface MessageAreaProps {
   conversationId: string;
@@ -68,6 +73,13 @@ export function MessageArea({ conversationId }: MessageAreaProps) {
     if (!q) return rawMessages;
     return rawMessages.filter((m) => m.text.toLowerCase().includes(q));
   }, [rawMessages, messageSearchQuery]);
+
+  // Messages name their author by id only, so names are resolved against the
+  // conversation's participants at render time.
+  const participantsById = useMemo(
+    () => indexParticipants(activeConv?.participants ?? []),
+    [activeConv?.participants]
+  );
 
   const { containerRef, isAtBottom, unreadCount, scrollToBottom } = useChatScroll({
     messages: rawMessages,
@@ -240,7 +252,7 @@ export function MessageArea({ conversationId }: MessageAreaProps) {
                 <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                   {showSenderName && (
                     <span className="text-[10px] text-indigo-300 ml-2 mb-1 font-medium">
-                      {msg.sender?.name || 'Unknown'}
+                      {senderName(msg, participantsById)}
                     </span>
                   )}
 

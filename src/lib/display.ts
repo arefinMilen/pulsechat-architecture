@@ -1,4 +1,4 @@
-import { Conversation, User } from '../types';
+import { Conversation, Message, User } from '../types';
 
 /**
  * Resolves the label for a thread.
@@ -35,6 +35,38 @@ export function initialsOf(label: string): string {
 /** A person's display name, falling back to their number. */
 export function userLabel(user: User): string {
   return user.name?.trim() || user.phone?.trim() || 'Unknown user';
+}
+
+/**
+ * Names the author of a message.
+ *
+ * The API returns `message.sender` as a bare user id rather than an embedded
+ * object, so the name has to be resolved against the conversation's own
+ * participant list. Optimistic messages carry a real `sender`, so that is
+ * preferred when present.
+ *
+ * A sender absent from the list is someone who has since left the group — their
+ * messages remain in the transcript, so they get a neutral label rather than
+ * "Unknown".
+ */
+export function senderName(
+  message: Pick<Message, 'senderId' | 'sender'>,
+  participantsById: Map<string, User>
+): string {
+  const embedded = message.sender?.name?.trim();
+  if (embedded) return embedded;
+
+  const participant = message.senderId ? participantsById.get(message.senderId) : undefined;
+  return participant ? userLabel(participant) : 'Former member';
+}
+
+/** Indexes a participant list by id for per-message name lookups. */
+export function indexParticipants(participants: User[]): Map<string, User> {
+  const byId = new Map<string, User>();
+  for (const person of participants) {
+    if (person.id) byId.set(person.id, person);
+  }
+  return byId;
 }
 
 /**

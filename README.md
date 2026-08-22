@@ -322,7 +322,16 @@ committing these as real tests — the first thing I would add.
     so a number saved with a leading `+` cannot be matched by number at all —
     raw crashes, escaped matches nothing. Those users are still findable by name.
 
-12. **Empty messages are accepted by the API.** `POST /messages` with
+12. **`message.sender` is a bare user id, not an embedded object.** Nothing in a
+    message identifies its author by name, so a group transcript has no way to
+    label who said what from the message alone — every incoming message rendered
+    as "Unknown" until I caught it. It only shows in groups, since a direct
+    thread never draws a name label, which is why it survived earlier testing.
+    **Handled by** indexing the conversation's participants by id and resolving
+    the name at render time. A sender missing from that list has left the group,
+    and is labelled as such rather than as an error.
+
+13. **Empty messages are accepted by the API.** `POST /messages` with
     `{"text": ""}` returns `200` and stores a blank message; only omitting the
     field is rejected. I had assumed the opposite and documented it that way
     until a live check caught it. The requirement that empty messages not be
@@ -343,13 +352,13 @@ committing these as real tests — the first thing I would add.
    which is honest but not helpful. Persisting pending messages to IndexedDB and
    flushing on reconnect is the right behaviour — I removed the claim rather than
    ship a stub of it.
-4. **Resolve group sender names.** `message.sender` is a bare id; names come from
-   the conversation's participant list, so a message from someone who has since
-   left a group shows no name. A small user cache would fix it.
-5. **Read receipts and typing indicators.** The gateway emits neither today, so
+4. **Read receipts and typing indicators.** The gateway emits neither today, so
    both would need server work.
-6. **Virtualised transcript.** Fine at current volumes; a long history would want
+5. **Virtualised transcript.** Fine at current volumes; a long history would want
    windowing.
+6. **Add members to an existing group.** `POST /conversations/{id}/participants`
+   works and is wired into the API client, but the group settings dialog only
+   exposes removal. Adding the counterpart flow is small.
 
 ---
 
