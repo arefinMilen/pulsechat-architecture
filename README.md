@@ -2,8 +2,8 @@
 
 A real-time chat application built for the frontend take-home assignment.
 
-- **Chat app (Part 1)** — _add your deployed URL here, e.g._ `https://<project>.vercel.app/login`
-- **Landing page (Part 2)** — _add your deployed URL here, e.g._ `https://<project>.vercel.app`
+- **Chat app (Part 1)** — https://pulsechat-architecture.vercel.app/login
+- **Landing page (Part 2)** — https://pulsechat-architecture.vercel.app
 - **API reference** — [`docs/API_DOCUMENTATION.md`](docs/API_DOCUMENTATION.md)
 - **OpenAPI 3.1 spec** — [`docs/openapi.yaml`](docs/openapi.yaml)
 
@@ -32,6 +32,8 @@ animation library carried along unused.
 ## Running locally
 
 ```bash
+git clone https://github.com/arefinMilen/pulsechat-architecture.git
+cd pulsechat-architecture
 npm install
 npm run dev        # http://localhost:3000
 ```
