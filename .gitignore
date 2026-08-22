@@ -28,3 +28,11 @@ yarn-error.log*
 *.pem
 Thumbs.db
 .verify/
+
+# Internal working notes — kept locally, not part of the submission.
+# (docs/ is a deliverable and is deliberately NOT ignored.)
+/Taghyeer Assignment Execution Strategy.md
+/Senior_Frontend_Engineer_Task_Instructions.md
+/*.pdf
+/notes/
+/scratch/
