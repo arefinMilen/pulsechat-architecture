@@ -23,6 +23,7 @@ A real-time chat application built for the frontend take-home assignment.
 | State | Zustand |
 | Transport | Axios (REST), Socket.IO client (live messages) |
 | Icons | lucide-react |
+| Tests | Vitest |
 
 Seven runtime dependencies, all of them used. There is no state-management or
 animation library carried along unused.
@@ -39,6 +40,8 @@ npm run dev        # http://localhost:3000
 ```
 
 ```bash
+npm test           # vitest (58 tests)
+npm run test:watch # vitest in watch mode
 npm run build      # production build
 npm run lint       # eslint
 npx tsc --noEmit   # type check
@@ -70,7 +73,8 @@ src/
 │  ├─ api-client.ts      Typed API surface
 │  ├─ normalize.ts       API → domain translation boundary
 │  ├─ display.ts         Titles, initials, timestamps
-│  └─ socket.ts          Socket.IO lifecycle
+│  ├─ socket.ts          Socket.IO lifecycle
+│  └─ __tests__/         Unit tests + recorded API fixtures
 └─ store/                Zustand stores (auth, chat, simulator)
 ```
 
@@ -249,15 +253,39 @@ claims, uninstalled the packages, and rewrote this document to describe what is
 actually here. That is the correction I would most want a reviewer to know I
 made.
 
-I verified the finished client against the live API with throwaway integration
-scripts — id mapping, direct-thread titles, message ordering, sender/receiver
+### Tests
+
+`npm test` runs 58 unit tests over the two modules where every expensive bug in
+this project lived: the normalization boundary and the display helpers.
+
+They run against **payloads recorded verbatim from the live API**
+([`src/lib/__tests__/fixtures.ts`](src/lib/__tests__/fixtures.ts)) rather than
+hand-written approximations — the `_id` keys, the singular `participant`, the
+`lastMessage: {}`, the newest-first ordering, and the socket frame's
+epoch-millisecond `createdAt` are all real captures. Rewriting a fixture to make
+a test pass would defeat the point, so a couple of tests assert the fixture's own
+shape: one checks that the message fixture really does arrive newest-first, so
+the sorting test cannot pass for the wrong reason.
+
+Most cases are pinned to a specific defect that actually shipped — every message
+attributed to the current user, direct threads with no counterpart, group
+senders labelled "Unknown". **Writing them immediately found one more:**
+`POST /conversations` returns neither `type` nor `name`, so a freshly created
+direct thread was being inferred as a *group* — titled "Unnamed group", with a
+group-settings button on a one-to-one chat, until the background refetch
+corrected it. Groups always carry both fields, so the absence of a name is now
+what identifies a new direct thread. Verified against the live API afterwards.
+
+I also verified the finished client against the live API with throwaway
+integration scripts — id mapping, direct-thread titles, message ordering, sender/receiver
 classification, the group-size rejection, the socket frame shape, and a two-user
 exchange with one client listening on the socket while the other posted over
 REST. That pass is also what caught issues 11 and 12 below: the search endpoint's
 regex injection, and the fact that the API happily stores empty messages despite
 my having documented the opposite. Assumptions I had written down but not
-executed were exactly the ones that turned out wrong, which is the argument for
-committing these as real tests — the first thing I would add.
+executed were exactly the ones that turned out wrong — which is the whole
+argument for the committed unit tests above, and for pushing the integration
+half of this into CI next.
 
 ---
 
@@ -342,9 +370,11 @@ committing these as real tests — the first thing I would add.
 
 ## What I would do differently with more time
 
-1. **Tests.** The normalization layer is pure functions over recorded API
-   payloads — near-ideal unit-test material, and exactly where the expensive bugs
-   were. Vitest plus a Playwright pass over send/receive across two sessions.
+1. **Component and end-to-end tests.** The unit tests cover the logic layer;
+   what they do not cover is rendering and the socket path. A Testing Library
+   pass over the transcript and composer, plus a Playwright run driving two
+   browser sessions through a live exchange, would close the gap — the
+   integration checks I ran by hand belong in CI.
 2. **Message pagination.** `hasMore` is returned; with a cursor parameter (or a
    documented `before`) this becomes load-older-on-scroll-to-top with scroll
    anchoring.

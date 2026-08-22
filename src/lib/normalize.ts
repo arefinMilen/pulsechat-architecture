@@ -98,9 +98,16 @@ export function normalizeConversation(raw: Raw): Conversation {
   const hasLastMessage =
     !!raw?.lastMessage && Object.keys(raw.lastMessage).length > 0;
 
+  // `POST /conversations` omits `type` entirely, and returns `participants` as
+  // bare ids — the same field name a group uses. Groups always carry both an
+  // explicit `type` and a `name`, so the absence of a name is what identifies a
+  // freshly created direct thread.
+  const type: Conversation['type'] =
+    raw?.type ?? (raw?.participant || !raw?.name ? 'direct' : 'group');
+
   return {
     id: conversationId,
-    type: raw?.type ?? (raw?.participant ? 'direct' : 'group'),
+    type,
     name: raw?.name ?? null,
     participants,
     adminIds: Array.isArray(raw?.admins)
